@@ -33,9 +33,9 @@ def plot_prediction_for_day(y, y_hat, day: int = 1, save: None|str|Path = None, 
     # day = 59
     plt.plot(np.arange(24), y_hat[24*day], color="blue", label="y_pred")
     plt.plot(np.arange(24), y[24*day], color="orange", label="y")
-    plt.title(f"Den {day}")
-    plt.xlabel("hodiny")
-    plt.ylabel("Spotřeba el. energie [W]")
+    plt.title(f"Day {day}")
+    plt.xlabel("Hours")
+    plt.ylabel("Power consumption [W]")
     plt.legend()
     if save is not None:
         plt.savefig(save)

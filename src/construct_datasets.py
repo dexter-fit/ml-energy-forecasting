@@ -343,12 +343,14 @@ def download_weather(pos: GpsPos, timestamps: list[int]) -> list[WeatherHistoryR
     return result
 
 
+# %%
 class DataSet():
     def __init__(self, data: pd.DataFrame, y: pd.Series, X: pd.DataFrame) -> None:
         self.y = y
         self.X = X
         self.data = data
 
+# %%
 
 def store_dataset(ds: DataSet, name: str, ds_path: Path):
     file_path = ds_path / f"{name}-{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.pkl"
@@ -594,6 +596,7 @@ def get_weather(timestamp: int, pos: GpsPos) -> tuple[WeatherHistoryRes, bool]|N
     
     w = retrieve_weather_db(conn, pos, dt=timestamp)
     if w is not None:
+        print(f"fromDB. dt = {w.data.dt}, timestamp = {timestamp}")
         return (w, True)
 
     ws = download_weather(pos, [timestamp])
@@ -617,19 +620,13 @@ def add_weather_data(ds: DataSet, pos: GpsPos):
     for col in new_cols:
         ds.data[col] = pd.Series([None] * len(ds.data))
 
-    MAX_W = 8800
-
     calls = 0
     max_calls_per_day = 999
 
     for idx, ts in zip(ds.data.index, ds.data.index.astype(np.int64) // 10**9):
-        if MAX_W == 0:
-            print("Reached max weather iterations -- this should not happen")
-            break
-        MAX_W -= 1
 
         if calls >= 100:
-            print(f"{8800 - MAX_W}. Sleeping for 6s...")
+            print(f"{idx}. Sleeping for 6s...")
             time.sleep(4)
             calls = 0
 
@@ -644,7 +641,7 @@ def add_weather_data(ds: DataSet, pos: GpsPos):
                 calls += 1
                 max_calls_per_day -= 1
                 if max_calls_per_day == 0:
-                    print("Reached max weather calls -- stopping")
+                    print(f"Reached max weather calls -- stopping: {idx}")
                     break
             vals = w.to_pd_row()
             ds.data.loc[idx, new_cols] = vals
@@ -690,9 +687,9 @@ def main(name):
     if name == "nist1":
         ds_path = prepare_nist(NIST_POS, True, year=1)
     if name == "nist2":
-        ds_path = prepare_nist(NIST_POS, False, year=2)
+        ds_path = prepare_nist(NIST_POS, True, year=2)
     if name == "fr-house":
-        ds_path = prepare_fr_house(FR_HOUSE_POS, False)
+        ds_path = prepare_fr_house(FR_HOUSE_POS, True)
 
     return ds_path
 
@@ -713,7 +710,7 @@ def test_retrieve_weather_from_db():
 
 
 if __name__ == "__main__":
-    ds_path = main("nist1")  # change name of dataset to get different data
+    ds_path = main("fr-house")  # change name of dataset to get different data
     if ds_path is not None:
         ds = load_dataset(ds_path)
         print(ds.y, ds.X)

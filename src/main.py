@@ -1,12 +1,17 @@
 import argparse
 from datetime import datetime
 from pathlib import Path
+
+from keras.src.utils.model_visualization import plot_model
 from construct_datasets import DataSet
+import numpy as np
 import models.cnn as cnn
 import models.tcn_lstm as lstm
 import evaluation
 import preprocess_dataset as dat
 import torch
+from notebooks.eval_transfer import eval_transfer
+from notebooks.finetune import finetune
 
 
 
@@ -64,7 +69,7 @@ def run_experiment(dataset: str, features: list[str], architecture: str, general
 
 
     univariate = len(features) == 1
-    
+
 
     if univariate:
         data_func = dat.nist_univariate if dataset=="nist" else dat.fr_univariate
@@ -88,6 +93,12 @@ def run_experiment(dataset: str, features: list[str], architecture: str, general
 
         X_train, X_train_exo_np, y_train, X_test, X_test_exo, y_test = dat.nist_multivariate(path=None, exo_list=features)
 
+        if architecture == "tcn-lstm":
+            for i in range(len(X_train_exo_np)):
+                X_train = np.concatenate((X_train, X_train_exo_np[i]), axis=-1) # type: ignore
+            for i in range(len(X_test_exo)):
+                X_test = np.concatenate((X_test, X_test_exo[i]), axis=-1) # type: ignore
+
         X_train = torch.tensor(X_train).to(device)
         y_train = torch.tensor(y_train).to(device)
 
@@ -96,12 +107,19 @@ def run_experiment(dataset: str, features: list[str], architecture: str, general
             X_train_exo.append(torch.tensor(exo).to(device))
 
 
-        model.fit([X_train, *X_train_exo], y_train, epochs=epochs)
+        if architecture == "tcn-lstm":
+            model.fit(X_train, y_train, epochs=epochs)
+        else:
+            model.fit([X_train, *X_train_exo], y_train, epochs=epochs)
 
         save_checkpoint(name=name, checkpoint_dir=checkpoint_dir, model=model, architecture=architecture, features=features)
 
         print("Running evaluation...")
-        y_hat = model.predict([X_test, *X_test_exo])
+        if architecture == "tcn-lstm":
+            y_hat = model.predict(X_test)
+            y_hat = y_hat.squeeze(axis=-1)
+        else:
+            y_hat = model.predict([X_test, *X_test_exo])
         eval_res = evaluation.eval_forecast(y=y_test, y_hat=y_hat)
 
 
@@ -112,6 +130,11 @@ def run_experiment(dataset: str, features: list[str], architecture: str, general
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="")
+
+    architecture = "tcn-lstm"
+    # eval_transfer(architecture=architecture)
+    # finetune(architecture=architecture, epochs=2)
+    # exit()
 
     parser.add_argument("-f", "--features", choices=["history", "temperature", "humidity", "wind"], required=True, action="append")
     parser.add_argument("--network", choices=["tcn", "tcn-lstm"], required=True)
@@ -126,5 +149,4 @@ if __name__ == "__main__":
     checkpoint_dir.mkdir(exist_ok=True)
 
     run_experiment(dataset=args.dataset, features=args.features, architecture=args.network, generalize_test=args.generalize_test, checkpoint_dir=checkpoint_dir, epochs=args.epochs)
-    
 
