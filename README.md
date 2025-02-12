@@ -39,6 +39,8 @@ Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
+Which installs all dependencies, except `pytorch`, which has to be installed separately, see: <https://pytorch.org/get-started/locally/>.
+
 
 
 Then transform the raw data into a dataset with added weather variables:
@@ -68,4 +70,4 @@ Weather history data is downloaded for each datapoint.
 > Contains information from [OpenWeather](https://openweathermap.org/), which is made available
 > here under the Open Database License (ODbL).
 
-![openweathermap logo](./images/OpenWeather-Master-Logo RGB.png)
+![openweathermap logo](images/OpenWeather-Master-Logo RGB.png)

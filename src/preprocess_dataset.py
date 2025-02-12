@@ -133,7 +133,7 @@ def nist_multivariate(path: Path|None = None, exo_list: list[str] = ["temperatur
     X_exo_list_test = []
     X_test, y_test = None, None
     for var in exo_list:
-        X_multi, y_in = _nist_multivariate(path, year=1, exo_var=var)  # TODO(filip): change
+        X_multi, y_in = _nist_multivariate(path, year=2, exo_var=var)
 
         X1 = X_multi[:, :, 0].reshape((X_multi.shape[0], X_multi.shape[1], 1))
         X_exo = X_multi[:, :, 1].reshape((X_multi.shape[0], X_multi.shape[1], 1))
@@ -142,7 +142,7 @@ def nist_multivariate(path: Path|None = None, exo_list: list[str] = ["temperatur
         y_test = y_in
 
         X_exo_list_test.append(X_exo)
-    
+
     return X_train, X_exo_list_train, y_train, X_test, X_exo_list_test, y_test
 
 
@@ -153,7 +153,6 @@ def _nist_multivariate(path: Path|None = None, year: int = 1, exo_var="temperatu
         ds = construct_datasets.load_dataset(DATA_ROOT / f"nist/datasets/year{year}/nist{year}.pkl")
     else:
         ds = construct_datasets.load_dataset(path)
-    # print(ds.data.columns)
 
     if exo_var == "temperature":
         # ==== temp
@@ -177,3 +176,134 @@ def _nist_multivariate(path: Path|None = None, year: int = 1, exo_var="temperatu
     X, y = get_rnn_inputs(univ_nist, 48, 24)
 
     return X, y
+
+# %%
+def frhouse_multivariate(path: Path|None = None, exo_list: list[str] = ["temperature"]):
+    """
+    Multivariate IHEPC dataset
+
+    :param path: Path to raw data, if None, uses default name: fr-house.pkl
+    :param exo_list: List of additional variables to include
+    """
+
+    if "history" in exo_list:
+        exo_list.remove("history")
+
+    X_exo_list_train = []
+    X_train, y_train = None, None
+    for var in exo_list:
+        X_multi, y_in = _frhouse_multivariate(path, year=1, exo_var=var)
+
+        X1 = X_multi[:, :, 0].reshape((X_multi.shape[0], X_multi.shape[1], 1))
+        X_exo = X_multi[:, :, 1].reshape((X_multi.shape[0], X_multi.shape[1], 1))
+
+        X_train = X1
+        y_train = y_in
+
+        X_exo_list_train.append(X_exo)
+
+    X_exo_list_test = []
+    X_test, y_test = None, None
+    for var in exo_list:
+        X_multi, y_in = _frhouse_multivariate(path, year=2, exo_var=var)
+
+        X1 = X_multi[:, :, 0].reshape((X_multi.shape[0], X_multi.shape[1], 1))
+        X_exo = X_multi[:, :, 1].reshape((X_multi.shape[0], X_multi.shape[1], 1))
+
+        X_test = X1
+        y_test = y_in
+
+        X_exo_list_test.append(X_exo)
+
+    return X_train, X_exo_list_train, y_train, X_test, X_exo_list_test, y_test
+
+
+
+# %%
+def _frhouse_multivariate(path: Path|None = None, year: int = 1, exo_var="temperature", finetuning: bool = False):
+
+
+    if path is None:
+        ds = construct_datasets.load_dataset(DATA_ROOT / f"frhouse/datasets/fr-house.pkl")
+    else:
+        ds = construct_datasets.load_dataset(path)
+
+
+    if year == 1:
+        if finetuning:
+            data = ds.data.iloc[:(8760//2)]
+            print(len(data["Global_active_power"]))
+        else:
+            data = ds.data.iloc[:8760]
+    elif year == 2:
+        if finetuning:
+            data = ds.data.iloc[(8760//2):(8760//2)+(8760)]
+        else:
+            data = ds.data.iloc[8760:8760*2]
+    else:
+        raise Exception(f"unsupported IHEPC year: {year}");
+
+    year_seq = np.array(data["Global_active_power"]).reshape(len(data["Global_active_power"]), 1)
+
+    if exo_var == "temperature":
+        # ==== temp
+        # print(data["temp"][~data["temp"].apply(lambda x: isinstance(x, float))])
+        data["temp"] = data["temp"].astype(float)
+        univ_nist = np.hstack((year_seq, np.array(data["temp"]).reshape((len(data["Global_active_power"]), 1))))
+
+    elif exo_var == "humidity":
+        # ==== humidity
+        # print(data["humidity"][~data["humidity"].apply(lambda x: isinstance(x, float))])
+        data["humidity"] = data["humidity"].astype(float)
+        univ_nist = np.hstack((year_seq, np.array(data["humidity"]).reshape((len(data["Global_active_power"]), 1))))
+    elif exo_var == "wind":
+        # ==== wind_speed
+        # print(data["wind_speed"][~data["wind_speed"].apply(lambda x: isinstance(x, float))])
+        data["wind_speed"] = data["wind_speed"].astype(float)
+        univ_nist = np.hstack((year_seq, np.array(data["wind_speed"]).reshape((len(data["Global_active_power"]), 1))))
+    else:
+        raise Exception("unknown exo variable: " + exo_var)
+
+    X, y = get_rnn_inputs(univ_nist, 48, 24)
+
+    return X, y
+
+# %%
+def frhouse_multivariate_finetune(path: Path|None = None, exo_list: list[str] = ["temperature"]):
+    """
+    Multivariate IHEPC dataset for finetuning on 6 months and testing on the next year
+
+    :param path: Path to raw data, if None, uses default name: fr-house.pkl
+    :param exo_list: List of additional variables to include
+    """
+
+    if "history" in exo_list:
+        exo_list.remove("history")
+
+    X_exo_list_train = []
+    X_train, y_train = None, None
+    for var in exo_list:
+        X_multi, y_in = _frhouse_multivariate(path, year=1, exo_var=var, finetuning=True)
+
+        X1 = X_multi[:, :, 0].reshape((X_multi.shape[0], X_multi.shape[1], 1))
+        X_exo = X_multi[:, :, 1].reshape((X_multi.shape[0], X_multi.shape[1], 1))
+
+        X_train = X1
+        y_train = y_in
+
+        X_exo_list_train.append(X_exo)
+
+    X_exo_list_test = []
+    X_test, y_test = None, None
+    for var in exo_list:
+        X_multi, y_in = _frhouse_multivariate(path, year=2, exo_var=var, finetuning=True)
+
+        X1 = X_multi[:, :, 0].reshape((X_multi.shape[0], X_multi.shape[1], 1))
+        X_exo = X_multi[:, :, 1].reshape((X_multi.shape[0], X_multi.shape[1], 1))
+
+        X_test = X1
+        y_test = y_in
+
+        X_exo_list_test.append(X_exo)
+
+    return X_train, X_exo_list_train, y_train, X_test, X_exo_list_test, y_test
